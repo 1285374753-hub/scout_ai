@@ -1,0 +1,843 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>ScoutAI - 现实重写节点</title>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syncopate:wght@700&display=swap" rel="stylesheet">
+    <style>
+        /* ================= 浅色系极客核心变量 ================= */
+        :root {
+            --bg-body: #EEF2F6; 
+            --bg-light: #F8FAFC; 
+            --text-main: #0F172A; 
+            --text-dim: #475569; 
+            --text-light: #94A3B8; 
+            
+            --accent-green: #059669; 
+            --accent-purple: #6366F1; 
+            --accent-orange: #EA580C; 
+            --accent-red: #EF4444; 
+            
+            /* 玻璃质感升维：更高透的光学折射与多层内阴影 */
+            --glass-bg: rgba(255, 255, 255, 0.5);
+            --glass-border: rgba(255, 255, 255, 0.8);
+            --shadow-float: 0 32px 64px -16px rgba(15, 23, 42, 0.15); 
+            --shadow-inner: inset 1px 1px 2px rgba(255, 255, 255, 0.95), inset -1px -1px 2px rgba(15, 23, 42, 0.03);
+            --border-divider: rgba(15, 23, 42, 0.08);
+            
+            --font-display: 'Syncopate', sans-serif;
+            --font-mono: 'Space Mono', monospace;
+            --font-zh: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+            
+            --safe-top: env(safe-area-inset-top, 20px);
+            --safe-bottom: env(safe-area-inset-bottom, 20px);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+        html, body {
+            width: 100%; margin: 0; padding: 0;
+            background-color: var(--bg-body); 
+            color: var(--text-main);
+            font-family: var(--font-zh); 
+            -webkit-font-smoothing: antialiased; 
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        .app-container {
+            width: 100%; max-width: 440px; min-height: 100vh;
+            margin: 0 auto; background-color: var(--bg-light);
+            position: relative; 
+            overflow: clip; 
+            box-shadow: 0 0 80px rgba(15, 23, 42, 0.1); 
+            transition: filter 0.3s ease, transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+        }
+
+        /* 增加极客感：像素级底图网格系统 */
+        .app-container::before {
+            content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            background-image: linear-gradient(rgba(15,23,42,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(15,23,42,0.03) 1px, transparent 1px);
+            background-size: 24px 24px; background-position: center top;
+            z-index: 0; pointer-events: none;
+        }
+
+        body.popup-active .app-container { filter: blur(8px); pointer-events: none;}
+
+        .noise-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 9999;
+            background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADIAAAAyBAMAAADsEZWCAAAAGFBMVEUAAAAAAIAAAACAAICAAAAAgIAAgAAAAIC/e/H3AAAAAXRSTlMAQObYZgAAAK1JREFUOMut0sENhDAMQ9FfHIAYgAn2X4xV6K/S7oBvT1I18nNjyB2y81N122e2Wl2zZ58Vn4X2G0XyA0nyA0myA0myA0myE0nyE0myE0nyE0myE0nyE0myE0nyE0myE0nyE0myE0myE0myE0myE0myE0myE0myE0myE0myE0myE0myE0myE0myE0myE0myE0myE0myE0myE0myE0myE0myE0myE0myE0myE0nyE0kyE0myA8nyA8A//AE3LwhZ2AAAAABJRU5ErkJggg==');
+            opacity: 0.035; pointer-events: none; background-repeat: repeat;
+        }
+
+        /* 强化空间对比：加深流体球色彩与光晕范围 */
+        .fluid-orb {
+            position: absolute; top: 25%; left: 50%; width: 160vw; height: 160vw; max-width: 900px; max-height: 900px;
+            background: radial-gradient(circle, rgba(99, 102, 241, 0.18) 0%, rgba(5, 150, 105, 0.12) 35%, transparent 65%);
+            border-radius: 50%; filter: blur(60px); z-index: 0;
+            transform: translate3d(-50%, -50%, 0); will-change: transform;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+            .fluid-orb { display: none; }
+        }
+
+        .tabular-nums { font-variant-numeric: tabular-nums; letter-spacing: -0.5px; }
+        .points-icon { display: inline-block; width: 1.1em; height: 1.1em; fill: currentColor; flex-shrink: 0; }
+        /* 注入发光体基因 */
+        .points-green { color: var(--accent-green); fill: var(--accent-green); filter: drop-shadow(0 0 6px rgba(5,150,105,0.4)); }
+        .flex-center { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+        .flex-start { display: inline-flex; align-items: center; justify-content: flex-start; gap: 6px; }
+
+        .reveal-up { opacity: 0; transform: translateY(30px); transition: opacity 0.8s cubic-bezier(0.2, 0.8, 0.2, 1), transform 0.8s cubic-bezier(0.2, 0.8, 0.2, 1); }
+        .reveal-up.active { opacity: 1; transform: translateY(0); }
+        .delay-1 { transition-delay: 0.1s; } .delay-2 { transition-delay: 0.2s; } .delay-3 { transition-delay: 0.3s; }
+
+        /* ================= 极简导航 ================= */
+        nav {
+            position: absolute; top: 0; left: 0; width: 100%; z-index: 100;
+            padding: calc(var(--safe-top) + 20px) 24px 16px; 
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .logo { font-family: var(--font-display); font-size: 13px; letter-spacing: 2.5px; font-weight: 700; color: var(--accent-purple); text-shadow: 0 0 10px rgba(99,102,241,0.3); }
+        
+        /* 导航栏右侧布局 (雷达 + 钱包) */
+        .nav-right { display: flex; align-items: center; gap: 12px; }
+
+        /* 迷你雷达核心样式 */
+        .mini-radar {
+            width: 28px; height: 28px; border-radius: 50%;
+            background: rgba(15, 23, 42, 0.02); border: 1px solid rgba(99, 102, 241, 0.25);
+            position: relative; display: flex; justify-content: center; align-items: center;
+            overflow: hidden; box-shadow: inset 0 0 6px rgba(99, 102, 241, 0.05);
+            filter: drop-shadow(0 0 4px rgba(99, 102, 241, 0.15));
+        }
+        .mini-radar::before {
+            content: ''; position: absolute; width: 14px; height: 14px;
+            border: 1px solid rgba(99, 102, 241, 0.15); border-radius: 50%; z-index: 1;
+        }
+        .radar-scan {
+            position: absolute; top: 0; left: 0; right: 0; bottom: 0; border-radius: 50%;
+            background: conic-gradient(from 0deg, transparent 65%, rgba(99, 102, 241, 0.6) 100%);
+            animation: radarSpin 2s linear infinite;
+        }
+        @keyframes radarSpin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .radar-dot {
+            width: 4px; height: 4px; background: var(--accent-green); border-radius: 50%;
+            position: relative; z-index: 2; box-shadow: 0 0 6px var(--accent-green), 0 0 10px var(--accent-green);
+            animation: radarDotPulse 1.5s infinite alternate;
+        }
+        @keyframes radarDotPulse { 0% { transform: scale(0.8); opacity: 0.7; } 100% { transform: scale(1.3); opacity: 1; } }
+
+        .wallet-container {
+            position: relative; background: rgba(255, 255, 255, 0.7); border: 1px solid var(--glass-border);
+            padding: 6px 14px; border-radius: 100px; font-family: var(--font-mono); 
+            font-size: 14px; font-weight: 800; color: var(--accent-green);
+            box-shadow: 0 8px 16px rgba(5,150,105,0.08), var(--shadow-inner); 
+            backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+            transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+        }
+
+        /* ================= 首屏 ================= */
+        .hero { padding: calc(var(--safe-top) + 120px) 24px 60px; position: relative; z-index: 10; display: flex; flex-direction: column; align-items: flex-start; }
+        .hero-label { 
+            font-family: var(--font-mono); font-size: 10px; color: var(--accent-purple); text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700; 
+            background: rgba(99, 102, 241, 0.08); border: 1px solid rgba(99, 102, 241, 0.15); padding: 6px 12px; border-radius: 100px; margin-bottom: 28px; 
+            box-shadow: 0 0 15px rgba(99,102,241,0.1);
+        }
+        .pulse-dot { width: 5px; height: 5px; background: var(--accent-purple); border-radius: 50%; animation: blinkHero 1.5s step-end infinite; box-shadow: 0 0 8px var(--accent-purple); }
+        @keyframes blinkHero { 50% { opacity: 0.2; box-shadow: none; } }
+        
+        /* 中文字体排版呼吸感优化 */
+        .hero-title { font-size: clamp(40px, 11vw, 52px); font-weight: 900; line-height: 1.15; margin-bottom: 24px; letter-spacing: -0.5px; color: var(--text-main); }
+        .hero-title span { display: block; overflow: hidden; padding-bottom: 4px; }
+        .hero-title span i { font-style: normal; display: inline-block; transform: translateY(100%); animation: slideUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        .hero-title span:nth-child(2) i { animation-delay: 0.1s; color: transparent; -webkit-text-stroke: 1px var(--text-main); }
+        .hero-title span:nth-child(3) i { animation-delay: 0.2s; color: var(--accent-green); -webkit-text-stroke: 0; text-shadow: 0 0 20px rgba(5,150,105,0.3); }
+        @keyframes slideUp { to { transform: translateY(0); } }
+        
+        .hero-desc { font-size: 15px; color: var(--text-dim); line-height: 1.8; max-width: 100%; opacity: 0; animation: fadeIn 1s ease 0.6s forwards; }
+        .hero-desc strong { color: var(--text-main); font-weight: 700; }
+        @keyframes fadeIn { to { opacity: 1; } }
+
+        /* ================= 商业逻辑 ================= */
+        .section-header { font-family: var(--font-mono); font-size: 11px; color: var(--text-light); letter-spacing: 2px; margin-bottom: 24px; font-weight: 700; display: flex; align-items: center; gap: 8px; text-transform: uppercase; }
+        .section-header::before { content: ''; width: 4px; height: 12px; background: var(--text-light); border-radius: 2px; }
+
+        .logic-section { padding: 20px 24px 60px; position: relative; z-index: 10;}
+        .logic-timeline { position: relative; padding-left: 24px; }
+        .logic-timeline::before { content: ''; position: absolute; left: 5px; top: 8px; bottom: 8px; width: 2px; background: repeating-linear-gradient(to bottom, rgba(99, 102, 241, 0.4) 0, rgba(99, 102, 241, 0.4) 4px, transparent 4px, transparent 8px); }
+        .logic-step { position: relative; margin-bottom: 36px; }
+        .logic-step:last-child { margin-bottom: 0; }
+        .logic-step:last-child::after { content: ''; position: absolute; left: -21px; top: 12px; bottom: -50px; width: 6px; background: var(--bg-light); z-index: 0; }
+        .step-dot { position: absolute; left: -24px; top: 4px; width: 10px; height: 10px; border-radius: 50%; background: var(--bg-light); border: 2px solid var(--accent-purple); z-index: 2; box-shadow: 0 0 10px rgba(99,102,241,0.2); }
+        .step-dot.green { border-color: var(--accent-green); background: var(--accent-green); box-shadow: 0 0 16px rgba(5, 150, 105, 0.6); }
+        .step-title { font-size: 16px; font-weight: 800; color: var(--text-main); margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+        .step-tag { font-family: var(--font-mono); font-size: 9px; background: rgba(15, 23, 42, 0.04); color: var(--text-dim); padding: 4px 8px; border-radius: 4px; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;}
+        .step-desc { font-size: 14px; color: var(--text-dim); line-height: 1.7; }
+
+        /* ================= 任务卡片 ================= */
+        .tasks-section { padding: 40px 0 20px; position: relative; z-index: 10;}
+        .horizontal-scroll { display: flex; gap: 16px; padding: 0 24px 32px; overflow-x: auto; scroll-snap-type: x mandatory; -ms-overflow-style: none; scrollbar-width: none; -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain; }
+        .horizontal-scroll::-webkit-scrollbar { display: none; }
+
+        .skeleton-card { flex: 0 0 85%; scroll-snap-align: center; height: 330px; background: linear-gradient(90deg, rgba(241,245,249,0.5) 25%, rgba(226,232,240,0.5) 50%, rgba(241,245,249,0.5) 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite linear; border-radius: 12px; border: 1px solid var(--border-divider); }
+        @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+        /* 强化硬核风格：更锋利的圆角与极客准星 */
+        .cyber-card { flex: 0 0 85%; scroll-snap-align: center; background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 12px; padding: 20px; box-shadow: var(--shadow-float), var(--shadow-inner); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); position: relative; display: flex; flex-direction: column; }
+        .cyber-card::before, .cyber-card::after { content: ''; position: absolute; width: 8px; height: 8px; border: 2px solid var(--accent-purple); opacity: 0.3; pointer-events: none; z-index: 20; }
+        .cyber-card::before { top: -1px; left: -1px; border-right: none; border-bottom: none; border-top-left-radius: 12px; }
+        .cyber-card::after { bottom: -1px; right: -1px; border-left: none; border-top: none; border-bottom-right-radius: 12px; }
+
+        .card-header-inner { padding: 4px 4px 20px; position: relative;}
+        .card-index { font-family: var(--font-display); font-size: 40px; color: rgba(15, 23, 42, 0.03); position: absolute; top: -8px; right: -4px; line-height: 1; font-weight: 900; }
+        .decode-text { font-size: 18px; font-weight: 800; margin-bottom: 12px; height: 26px; letter-spacing: 0.5px; color: var(--accent-purple); text-shadow: 0 0 8px rgba(99,102,241,0.2); }
+        .card-body { font-size: 14px; color: var(--text-dim); line-height: 1.7; }
+        
+        .interaction-panel { background: rgba(255,255,255,0.7); border-radius: 8px; padding: 16px; font-family: var(--font-mono); font-size: 12px; border: 1px solid var(--border-divider); margin-top: auto; box-shadow: inset 0 2px 8px rgba(15,23,42,0.02); }
+        .console-line { color: var(--text-dim); margin-bottom: 12px; line-height: 1.5; font-weight: 700; }
+        /* 错误指令泛红光 */
+        .console-line.error { color: var(--accent-red); text-shadow: 0 0 6px rgba(239, 68, 68, 0.3); }
+        
+        .action-btn {
+            width: 100%; background: var(--text-main); color: #FFF; border: none;
+            padding: 16px; border-radius: 8px; font-family: var(--font-zh); font-weight: 700;
+            font-size: 14px; margin-top: 16px; transition: all 0.2s cubic-bezier(0.2,0.8,0.2,1); position: relative; overflow: hidden;
+            -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+            box-shadow: 0 12px 24px rgba(15, 23, 42, 0.15);
+        }
+        .action-btn::after { content: ''; position: absolute; top: 0; left: 0; width: 0%; height: 100%; background: var(--accent-green); transition: width 0.1s linear; z-index: 1; }
+        .action-btn span { position: relative; z-index: 2; transition: color 0.2s; }
+        .action-btn.holding { transform: scale(0.96); box-shadow: 0 4px 12px rgba(15, 23, 42, 0.1); }
+        .action-btn.holding::after { width: 100%; transition: width 1s ease-in-out; }
+        /* 成功按钮绿光喷涌 */
+        .action-btn.success { background: var(--accent-green); color: #FFF; pointer-events: none; box-shadow: 0 12px 24px rgba(5, 150, 105, 0.3), inset 0 0 12px rgba(255,255,255,0.4); text-shadow: 0 0 4px rgba(255,255,255,0.5); }
+        .action-btn.success::after { display: none; }
+
+        /* ================= Swipe to Confirm 组件 ================= */
+        .swipe-container { position: relative; width: 100%; height: 52px; background: rgba(15, 23, 42, 0.03); border-radius: 8px; overflow: hidden; box-shadow: inset 0 2px 4px rgba(0,0,0,0.03); border: 1px solid rgba(15,23,42,0.06); }
+        .swipe-track-text { position: absolute; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-family: var(--font-zh); font-size: 13px; font-weight: 700; color: var(--text-dim); pointer-events: none; transition: opacity 0.3s; z-index: 1;}
+        .swipe-thumb { position: absolute; top: 4px; left: 4px; width: 44px; height: 44px; background: var(--text-main); border-radius: 6px; display: flex; justify-content: center; align-items: center; color: #FFF; box-shadow: 0 4px 12px rgba(15,23,42,0.2); z-index: 3; touch-action: none; transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1); cursor: grab;}
+        .swipe-thumb:active { cursor: grabbing; transform: scale(0.95); }
+        .swipe-fill { position: absolute; top: 0; left: 0; height: 100%; width: 0; background: var(--accent-green); z-index: 2; border-radius: 8px 0 0 8px; transition: background 0.3s; box-shadow: 0 0 15px rgba(5,150,105,0.4); }
+        
+        .swipe-container.success { border-color: var(--accent-green); box-shadow: 0 8px 24px rgba(5,150,105,0.2); }
+        .swipe-container.success .swipe-thumb { background: #FFF; color: var(--accent-green); transform: none; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        .swipe-container.success .swipe-fill { width: 100% !important; border-radius: 8px; }
+        .swipe-container.success .swipe-track-text { opacity: 0; }
+        .success-text { position: absolute; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-family: var(--font-zh); font-size: 14px; font-weight: 800; color: #FFF; opacity: 0; transition: opacity 0.3s; z-index: 4; pointer-events: none; text-shadow: 0 0 6px rgba(255,255,255,0.4); }
+        .swipe-container.success .success-text { opacity: 1; }
+
+        /* ================= 用户好评展示 ================= */
+        .reviews-section { padding: 0 0 40px; position: relative; z-index: 10; }
+        .review-card { flex: 0 0 85%; scroll-snap-align: center; background: rgba(255,255,255,0.8); border-radius: 12px; padding: 24px; box-shadow: var(--shadow-float); border: 1px solid var(--glass-border); display: flex; flex-direction: column; gap: 16px; backdrop-filter: blur(10px); }
+        .reviewer-info { display: flex; align-items: center; gap: 12px; }
+        .avatar { width: 44px; height: 44px; border-radius: 8px; background: linear-gradient(135deg, var(--accent-purple), #A78BFA); color: #FFF; font-family: var(--font-display); font-size: 16px; display: flex; justify-content: center; align-items: center; font-weight: 900; box-shadow: 0 4px 10px rgba(99,102,241,0.3); }
+        .avatar.g { background: linear-gradient(135deg, var(--accent-green), #34D399); box-shadow: 0 4px 10px rgba(5,150,105,0.3); }
+        .avatar.o { background: linear-gradient(135deg, var(--accent-orange), #FBBF24); box-shadow: 0 4px 10px rgba(234,88,12,0.3); }
+        .reviewer-details { display: flex; flex-direction: column; gap: 2px; }
+        .reviewer-details .name { font-size: 14px; font-weight: 800; color: var(--text-main); }
+        .verified-badge { background: var(--accent-green); color: #FFF; width: 14px; height: 14px; border-radius: 50%; display: inline-flex; justify-content: center; align-items: center; font-size: 9px; font-weight: bold; }
+        .reviewer-details .location { font-size: 11px; color: var(--text-light); }
+        .earnings-tag { align-self: flex-start; background: rgba(5, 150, 105, 0.08); color: var(--accent-green); padding: 6px 12px; border-radius: 6px; font-size: 13px; font-weight: 800; font-family: var(--font-mono); }
+        .review-text { font-size: 14px; color: var(--text-dim); line-height: 1.7; font-style: italic; }
+
+        /* ================= 防御雷达与护城河 ================= */
+        .moat-section { padding: 40px 24px 60px; position: relative; z-index: 10; }
+        .moat-title { font-size: 26px; font-weight: 900; margin-bottom: 32px; line-height: 1.35; letter-spacing: -0.5px;}
+        .moat-title i { color: var(--accent-purple); font-style: normal; text-shadow: 0 0 15px rgba(99,102,241,0.2); }
+        
+        .radar-box { position: relative; width: 100%; height: 140px; background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 12px; display: flex; justify-content: center; align-items: center; margin-bottom: 24px; overflow: hidden; box-shadow: inset 0 0 20px rgba(15,23,42,0.02); }
+        .radar-circle { position: absolute; width: 60px; height: 60px; border-radius: 50%; border: 1px solid rgba(99, 102, 241, 0.5); opacity: 0; animation: radarWave 3s ease-out infinite; box-shadow: inset 0 0 10px rgba(99,102,241,0.1); }
+        .radar-circle:nth-child(2) { animation-delay: 1s; }
+        .radar-circle:nth-child(3) { animation-delay: 2s; }
+        .radar-core { width: 16px; height: 16px; background: var(--accent-purple); border-radius: 50%; box-shadow: 0 0 20px var(--accent-purple), 0 0 40px var(--accent-purple); z-index: 2; position: relative;}
+        .radar-core::after { content: 'YOUR NODE'; position: absolute; top: 24px; left: -25px; font-family: var(--font-mono); font-size: 10px; color: var(--accent-purple); font-weight: 800; white-space: nowrap; text-shadow: 0 0 5px rgba(99,102,241,0.5); }
+        .radar-node { position: absolute; width: 8px; height: 8px; background: var(--accent-green); border-radius: 50%; box-shadow: 0 0 12px var(--accent-green), 0 0 24px var(--accent-green); animation: blinkNode 2s infinite alternate;}
+        .rn-1 { top: 30px; left: 50px; } .rn-2 { bottom: 40px; right: 60px; animation-delay: 0.5s; }
+        @keyframes radarWave { 0% { transform: scale(0.5); opacity: 1; } 100% { transform: scale(4); opacity: 0; } }
+        @keyframes blinkNode { 0% { opacity: 0.2; transform: scale(0.8); } 100% { opacity: 1; transform: scale(1.2); } }
+
+        .accordion { border-top: 1px solid var(--border-divider); }
+        .acc-item { border-bottom: 1px solid var(--border-divider); padding: 24px 0; }
+        .acc-header { display: flex; justify-content: space-between; align-items: center; font-size: 15px; color: var(--text-main); font-weight: 800;}
+        .acc-header .num { font-family: var(--font-mono); color: var(--accent-purple); margin-right: 12px; font-size: 11px; text-shadow: 0 0 5px rgba(99,102,241,0.2);}
+        .acc-body { font-size: 14px; color: var(--text-dim); line-height: 1.7; padding-top: 16px; display: none; }
+
+        /* ================= 隐私保护组件 ================= */
+        .security-section { padding: 0 24px 60px; position: relative; z-index: 10; }
+        .security-card {
+            background: linear-gradient(145deg, rgba(255,255,255,0.9), rgba(248,250,252,0.6));
+            border: 1px solid var(--glass-border); border-radius: 12px; padding: 32px 24px;
+            box-shadow: var(--shadow-float), var(--shadow-inner);
+            display: flex; flex-direction: column; align-items: center; text-align: center;
+            position: relative; overflow: hidden; backdrop-filter: blur(10px);
+        }
+        .security-card::before {
+            content: ''; position: absolute; top: -50px; left: 50%; transform: translateX(-50%);
+            width: 150px; height: 150px; background: radial-gradient(circle, rgba(5, 150, 105, 0.2) 0%, transparent 70%);
+            border-radius: 50%; z-index: 0; pointer-events: none;
+        }
+        .shield-wrapper { position: relative; width: 56px; height: 56px; margin-bottom: 20px; z-index: 1; display: flex; justify-content: center; align-items: center;}
+        .shield-icon-svg { width: 32px; height: 32px; color: var(--accent-green); fill: none; stroke: currentColor; stroke-width: 2; position: relative; z-index: 2; filter: drop-shadow(0 0 8px rgba(5,150,105,0.3));}
+        .sec-title { font-size: 18px; font-weight: 900; color: var(--text-main); margin-bottom: 12px; z-index: 1;}
+        .sec-desc { font-size: 14px; color: var(--text-dim); line-height: 1.7; margin-bottom: 24px; z-index: 1;}
+        
+        .sec-badges { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; z-index: 1; width: 100%;}
+        .sec-badge { 
+            display: inline-flex; align-items: center; gap: 6px; 
+            background: rgba(5, 150, 105, 0.08); border: 1px solid rgba(5, 150, 105, 0.15);
+            color: var(--accent-green); font-size: 12px; font-weight: 800; 
+            padding: 6px 12px; border-radius: 6px; box-shadow: 0 2px 8px rgba(5,150,105,0.05);
+        }
+        .sec-badge svg { width: 12px; height: 12px; fill: currentColor; }
+
+        /* ================= 底部免责声明 ================= */
+        .legal-footer { padding: 40px 24px 160px; font-family: var(--font-zh); border-top: 1px solid var(--border-divider); position: relative; z-index: 10; background: rgba(255,255,255,0.3); }
+        .legal-list { list-style: none; font-size: 11px; line-height: 1.7; color: var(--text-light); }
+        .legal-list li { margin-bottom: 12px; position: relative; padding-left: 14px; }
+        .legal-list li::before { content: '·'; position: absolute; left: 0; top: 0; font-weight: bold; font-size: 14px; line-height: 1;}
+
+        .cta-bar { position: fixed; bottom: 0; left: 0; width: 100%; padding: 24px 24px calc(var(--safe-bottom) + 24px); background: linear-gradient(to top, rgba(248, 250, 252, 1) 40%, rgba(248, 250, 252, 0.8) 75%, transparent); z-index: 100; pointer-events: none; }
+        .btn-cta { pointer-events: auto; width: 100%; background: var(--text-main); color: #FFF; border: none; padding: 20px; border-radius: 12px; font-size: 16px; font-weight: 800; letter-spacing: 1px; box-shadow: 0 16px 32px rgba(15, 23, 42, 0.2); transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.2s; display: flex; justify-content: center; align-items: center; gap: 8px; }
+        .btn-cta:active { transform: scale(0.96); box-shadow: 0 8px 16px rgba(15, 23, 42, 0.15); }
+
+        /* 弹窗 */
+        .global-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; display: none; justify-content: center; align-items: center; z-index: 1000; opacity: 0; transition: opacity 0.4s ease; }
+        .global-overlay.active { display: flex; opacity: 1; background: rgba(15, 23, 42, 0.4); backdrop-filter: blur(4px); }
+        .status-popup { background: rgba(255,255,255,0.9); width: 85%; max-width: 360px; padding: 32px 24px; border-radius: 16px; box-shadow: 0 40px 80px rgba(15, 23, 42, 0.3), inset 0 0 0 1px rgba(255,255,255,1); text-align: center; display: flex; flex-direction: column; align-items: center; gap: 24px; transform: translateY(30px) scale(0.95); transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1.1); backdrop-filter: blur(20px); }
+        .global-overlay.active .status-popup { transform: translateY(0) scale(1); }
+        .loading-spinner { width: 50px; height: 50px; border: 3px solid rgba(99, 102, 241, 0.1); border-top: 3px solid var(--accent-purple); border-radius: 50%; animation: spin 1s linear infinite; box-shadow: 0 0 15px rgba(99,102,241,0.2); }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .error-x-icon { display: none; color: var(--accent-red); fill: currentColor; width: 50px; height: 50px; filter: drop-shadow(0 0 8px rgba(239,68,68,0.4)); animation: popupErrorEntry 0.4s cubic-bezier(0.2, 0.8, 0.2, 1.3) forwards; }
+        @keyframes popupErrorEntry { 0% { transform: scale(0.6) rotate(-20deg); opacity: 0; } 80% { transform: scale(1.1) rotate(5deg); opacity: 1; } 100% { transform: scale(1) rotate(0deg); opacity: 1; } }
+        .status-popup.failed .error-x-icon { display: block; animation: popupErrorEntry 0.4s cubic-bezier(0.2, 0.8, 0.2, 1.3) forwards, shakeError 0.4s ease 0.4s; }
+        @keyframes shakeError { 0%, 100% { transform: translateX(0); } 20%, 60% { transform: translateX(-4px); } 40%, 80% { transform: translateX(4px); } }
+        .status-popup.failed .loading-spinner { display: none; }
+        .popup-text { font-size: 15px; color: var(--text-dim); line-height: 1.7; font-weight: 700; }
+        .status-popup.failed .popup-text { color: var(--text-main); font-weight: 800; }
+        .popup-close-btn { display: none; margin-top: 10px; background: var(--bg-body); color: var(--text-main); border: none; padding: 12px 32px; border-radius: 8px; font-family: var(--font-zh); font-weight: 800; font-size: 14px; box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08); transition: transform 0.2s; }
+        .popup-close-btn:active { transform: scale(0.95); }
+        .status-popup.failed .popup-close-btn { display: inline-block; }
+
+    </style>
+</head>
+<body>
+
+<svg style="display: none;">
+  <symbol id="icon-node-point" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2.5"/>
+    <circle cx="12" cy="12" r="4" fill="currentColor"/>
+  </symbol>
+  <symbol id="icon-error-x" viewBox="0 0 24 24">
+    <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+  </symbol>
+  <symbol id="icon-arrow-right" viewBox="0 0 24 24">
+    <path d="M5 12h14M12 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </symbol>
+  <symbol id="icon-check-bold" viewBox="0 0 24 24">
+    <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+  </symbol>
+</svg>
+
+<div class="app-container">
+
+    <div class="noise-overlay"></div>
+    <div class="fluid-orb" id="orb"></div>
+
+    <nav>
+        <div class="logo">SCOUT_AI</div>
+        <div class="nav-right">
+            <div class="mini-radar">
+                <div class="radar-scan"></div>
+                <div class="radar-dot"></div>
+            </div>
+            
+            <div class="wallet-container flex-center tabular-nums" id="wallet-box">
+                <svg class="points-icon points-green"><use href="#icon-node-point"></svg>
+                <span id="wallet-balance">0.00</span>
+            </div>
+        </div>
+    </nav>
+
+    <section class="hero">
+        <div class="hero-label flex-center">
+            <span class="pulse-dot"></span> REALITY NODE // 物理节点
+        </div>
+        <h1 class="hero-title">
+            <span><i>拒绝投喂</i></span>
+            <span><i>合成数据</i></span>
+            <span><i>注入真实。</i></span>
+        </h1>
+        <p class="hero-desc">释放你的街头直觉。无需代码基础，用最真实的本地常识，为全球大模型打破<strong>“空间幻觉”</strong>。在这里，每一次现实核查都将实时转化为你的数字资产。</p>
+    </section>
+
+    <section class="tasks-section reveal-up delay-1">
+        <div class="section-header flex-start" style="padding: 0 24px;" id="status-text">
+            <span style="color: var(--accent-purple); animation: blinkHero 1.5s infinite; filter: drop-shadow(0 0 5px rgba(99,102,241,0.5));">●</span> 正在搜索周边区块的物理任务...
+        </div>
+        
+        <div class="horizontal-scroll" id="skeleton-container">
+            <div class="skeleton-card"></div>
+            <div class="skeleton-card"></div>
+        </div>
+
+        <div class="horizontal-scroll" id="actual-container" style="display: none;">
+            <div class="cyber-card">
+                <div class="card-header-inner">
+                    <div class="card-index">01</div>
+                    <div class="decode-text flex-start" data-text="价格事实核查">--------</div>
+                    <p class="card-body">大模型对本地物价产生幻觉。请核实真实价格，为企业建立价格锚点。</p>
+                </div>
+                <div class="interaction-panel">
+                    <div class="console-line flex-start tabular-nums">> Target: Mondial 4L炸锅</div>
+                    <div class="console-line error flex-start tabular-nums">> AI幻觉: <svg class="points-icon"><use href="#icon-node-point"></svg> 150 (过低)</div>
+                    
+                    <button class="action-btn flex-center" 
+                        ontouchstart="startHold(this, event)" 
+                        ontouchmove="moveHold(this, event)"
+                        ontouchend="endHold(this)" 
+                        onmousedown="startHold(this, event)" 
+                        onmouseup="endHold(this)" 
+                        onmouseleave="endHold(this)">
+                        <span>长按注入真实数据 (<svg class="points-icon"><use href="#icon-node-point"></svg> 250)</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="cyber-card">
+                <div class="card-header-inner">
+                    <div class="card-index">02</div>
+                    <div class="decode-text flex-start" data-text="街头语义重塑">--------</div>
+                    <p class="card-body">硅谷的机器听不懂本地俚语。用日常口语教导它，提升 AI 原生感。</p>
+                </div>
+                <div class="interaction-panel">
+                    <div class="console-line flex-start">> Input: "Dar um migué"</div>
+                    <div class="console-line flex-start">> 理解度: 极低 (需重塑)</div>
+                    
+                    <div class="swipe-container" id="swipeConfirm" style="margin-top: 16px;">
+                        <div class="swipe-fill" id="swipeFill"></div>
+                        <div class="swipe-track-text flex-center">向右滑动教导 AI <svg class="points-icon" style="font-size:10px;"><use href="#icon-arrow-right"></svg></div>
+                        <div class="success-text flex-center">验证成功 // 价值已入账</div>
+                        <div class="swipe-thumb" id="swipeThumb">
+                            <svg class="points-icon"><use href="#icon-arrow-right"></svg>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="logic-section reveal-up delay-2">
+        <div class="section-header flex-start">COMMERCIAL_LOGIC</div>
+        <div class="logic-timeline">
+            <div class="logic-step">
+                <div class="step-dot"></div>
+                <div class="step-title">需求端：巨头买单 <span class="step-tag">资金源</span></div>
+                <div class="step-desc">OpenAI、Gemini 等大模型，极度缺乏“巴西本地街头常识”。他们斥巨资购买真实的微调数据集来优化 AI 体验。</div>
+            </div>
+            <div class="logic-step">
+                <div class="step-dot"></div>
+                <div class="step-title">价值制造：纠正幻觉 <span class="step-tag">你的工作</span></div>
+                <div class="step-desc">平台发布微任务。只需动动手指拍张照或搜个物价，纠正 AI 在价格、地图和俚语上的“幻觉”，充当人类导师。</div>
+            </div>
+            <div class="logic-step">
+                <div class="step-dot green"></div>
+                <div class="step-title">价值变现：共识提现 <span class="step-tag">获收益</span></div>
+                <div class="step-desc">当同街区 3 名用户提供一致答案时，数据通过共识出售。系统即刻将报酬转化为积分，支持安全提现。</div>
+            </div>
+        </div>
+    </section>
+
+    <section class="reviews-section reveal-up delay-1">
+        <div class="section-header flex-start" style="padding: 0 24px;">NODE_FEEDBACK</div>
+        <div class="horizontal-scroll">
+            
+            <div class="review-card">
+                <div class="reviewer-info">
+                    <div class="avatar">C</div>
+                    <div class="reviewer-details">
+                        <div class="name flex-start">Carlos M. <span class="verified-badge flex-center">✓</span></div>
+                        <div class="location">São Paulo, SP</div>
+                    </div>
+                </div>
+                <div class="earnings-tag flex-start tabular-nums">已赚取: <svg class="points-icon points-green"><use href="#icon-node-point"></svg> 145.00</div>
+                <p class="review-text">“一开始以为是骗局，结果真的通过纠正 iFood 的外卖黑话赚到了。感觉自己是在教世界上最聪明的机器人了解我的家乡，很有成就感。”</p>
+            </div>
+
+            <div class="review-card">
+                <div class="reviewer-info">
+                    <div class="avatar g">A</div>
+                    <div class="reviewer-details">
+                        <div class="name flex-start">Ana C. <span class="verified-badge flex-center">✓</span></div>
+                        <div class="location">Rio de Janeiro, RJ</div>
+                    </div>
+                </div>
+                <div class="earnings-tag flex-start tabular-nums">已赚取: <svg class="points-icon points-green"><use href="#icon-node-point"></svg> 80.50</div>
+                <p class="review-text">“走在路上顺手拍了张旁边关门药店的照片就赚到了。防作弊机制很硬核，同一条街要三个人盲测一样才给钱。界面非常有高级感！”</p>
+            </div>
+
+            <div class="review-card">
+                <div class="reviewer-info">
+                    <div class="avatar o">F</div>
+                    <div class="reviewer-details">
+                        <div class="name flex-start">Felipe T. <span class="verified-badge flex-center">✓</span></div>
+                        <div class="location">Curitiba, PR</div>
+                    </div>
+                </div>
+                <div class="earnings-tag flex-start tabular-nums">已赚取: <svg class="points-icon points-green"><use href="#icon-node-point"></svg> 210.00</div>
+                <p class="review-text">“作为黄金级验证者，现在接到的长文本训练单价越来越高了。这完全是个靠本地常识变现的极客工具，门槛对普通人非常友好。”</p>
+            </div>
+
+        </div>
+    </section>
+
+    <section class="moat-section reveal-up delay-2">
+        <h2 class="moat-title">不可篡改的<br><i>数据护城河。</i></h2>
+        
+        <div class="radar-box">
+            <div class="radar-circle"></div>
+            <div class="radar-circle"></div>
+            <div class="radar-circle"></div>
+            <div class="radar-core"></div>
+            <div class="radar-node rn-1"></div>
+            <div class="radar-node rn-2"></div>
+        </div>
+
+        <div class="accordion">
+            <div class="acc-item" onclick="toggleAcc(this)">
+                <div class="acc-header"><div><span class="num">01 //</span> GPS 物理锁</div> <span style="color: var(--text-light); font-weight: 400;">+</span></div>
+                <div class="acc-body">彻底杜绝异地虚假刷单。系统将严格锁定设备定位，仅允许接收周边 3 公里内的专属物理任务，保证数据的绝对本地化。</div>
+            </div>
+            <div class="acc-item" onclick="toggleAcc(this)">
+                <div class="acc-header"><div><span class="num">02 //</span> 三人盲测共识</div> <span style="color: var(--text-light); font-weight: 400;">+</span></div>
+                <div class="acc-body">零信任架构。同一个核查任务将派发给同街区 3 名独立导师。只有当 3 人答案完全一致时，数据方可上链并确权结算。</div>
+            </div>
+        </div>
+    </section>
+
+    <section class="security-section reveal-up delay-1">
+        <div class="security-card">
+            <div class="shield-wrapper">
+                <svg class="shield-icon-svg" viewBox="0 0 24 24">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M9 12l2 2 4-4" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </div>
+            <h3 class="sec-title">严格保护您的隐私安全</h3>
+            <p class="sec-desc">我们仅提取与任务相关的公开街头信息。平台承诺绝不会收集、泄露您的私人通讯录、相册及财务等隐私数据，请放心使用。</p>
+            
+            <div class="sec-badges">
+                <span class="sec-badge"><svg><use href="#icon-check-bold"></svg> 数据脱敏处理</span>
+                <span class="sec-badge"><svg><use href="#icon-check-bold"></svg> 零隐私权限</span>
+                <span class="sec-badge"><svg><use href="#icon-check-bold"></svg> 安全合规</span>
+            </div>
+        </div>
+    </section>
+
+    <footer class="legal-footer reveal-up delay-2">
+        <div style="font-size: 11px; font-weight: 800; color: var(--text-light); margin-bottom: 16px; font-family: var(--font-mono); letter-spacing: 1px;">⚠ DISCLAIMER</div>
+        <ul class="legal-list">
+            <li>本平台不保证任何具体的收益。实际收益受算法匹配及验证结果严格影响。</li>
+            <li>18岁以下的儿童不得注册或使用本平台的网络打金与数据验证服务。</li>
+            <li>ScoutAI 为独立运营的数据聚合网络，与任何第三方无关。</li>
+        </ul>
+    </footer>
+
+    <div class="cta-bar">
+        <button class="btn-cta flex-center" onclick="triggerStartupProcess()">开启物理验证权限</button>
+    </div>
+
+</div>
+
+<div id="global-overlay" class="global-overlay" onclick="closePopup(event)">
+    <div id="status-popup" class="status-popup">
+        <div class="popup-icon-wrapper">
+            <div class="loading-spinner"></div>
+            <svg class="error-x-icon"><use href="#icon-error-x"></svg>
+        </div>
+        <p id="popup-text" class="popup-text">正在握手全球共识网络...<br>进行区块协议验证</p>
+        <button class="popup-close-btn" onclick="closePopup(null)">关闭并进入候补通道</button>
+    </div>
+</div>
+
+<script>
+    // 震动反馈 (保留原生防御性)
+    function triggerHaptic(pattern = 20) {
+        if (navigator.vibrate) navigator.vibrate(pattern);
+    }
+
+    // 骨架屏与滚动入场动画
+    window.addEventListener('DOMContentLoaded', () => {
+        setTimeout(() => {
+            document.getElementById('skeleton-container').style.display = 'none';
+            document.getElementById('actual-container').style.display = 'flex';
+            document.getElementById('status-text').innerHTML = "TRAINING_MODULES // 专属任务已就绪";
+        }, 1500); 
+
+        const revealElements = document.querySelectorAll('.reveal-up');
+        const revealObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('active');
+                    revealObserver.unobserve(entry.target);
+                }
+            });
+        }, { threshold: 0.1, rootMargin: "0px 0px -50px 0px" });
+        revealElements.forEach(el => revealObserver.observe(el));
+    });
+
+    // 抛物线金币特效
+    function showFloatingCoin(targetBtn) {
+        const walletBox = document.getElementById('wallet-box');
+        const coin = document.createElement('div');
+        coin.className = 'flying-coin flex-center';
+        coin.innerHTML = `<svg class="points-icon points-green" style="font-size:24px;"><use href="#icon-node-point"></svg>`;
+        
+        const trackRect = targetBtn.getBoundingClientRect();
+        const walletRect = walletBox.getBoundingClientRect();
+        
+        document.body.appendChild(coin);
+        coin.style.position = 'fixed';
+        coin.style.zIndex = '9999';
+        coin.style.left = `${trackRect.right - 40}px`;
+        coin.style.top = `${trackRect.top}px`;
+        
+        const moveX = walletRect.left + 10 - (trackRect.right - 40);
+        const moveY = walletRect.top + 10 - trackRect.top;
+
+        coin.style.animation = `flyCoin 0.8s cubic-bezier(0.2, 0.8, 0.4, 1) forwards`;
+        const styleSheet = document.createElement("style");
+        styleSheet.innerText = `
+            @keyframes flyCoin {
+                0% { transform: translate(0, 0) scale(1); opacity: 1; filter: drop-shadow(0 0 10px rgba(5,150,105,0.8)); }
+                50% { transform: translate(${moveX * 0.5}px, ${moveY * 0.8 - 50}px) scale(1.2); opacity: 1; filter: drop-shadow(0 0 15px rgba(5,150,105,1)); }
+                100% { transform: translate(${moveX}px, ${moveY}px) scale(0.5); opacity: 0; }
+            }
+        `;
+        document.head.appendChild(styleSheet);
+
+        setTimeout(() => { walletBox.style.transform = 'scale(1.1)'; triggerHaptic(20); }, 700);
+        setTimeout(() => { walletBox.style.transform = 'scale(1)'; }, 900);
+        setTimeout(() => { coin.remove(); styleSheet.remove(); }, 850);
+    }
+
+    // --- 长按交互完美释放原生滑动 ---
+    let holdTimer;
+    let isSuccess = false;
+    let startY = 0;
+    let startX = 0;
+    let balance = 0.00;
+
+    function startHold(btn, e) {
+        if(isSuccess) return;
+        if (e && e.type === 'touchstart') {
+            startX = e.touches[0].clientX;
+            startY = e.touches[0].clientY;
+        }
+        btn.classList.add('holding');
+        triggerHaptic(10); 
+        
+        holdTimer = setTimeout(() => {
+            isSuccess = true;
+            btn.classList.remove('holding');
+            btn.classList.add('success');
+            btn.querySelector('span').innerText = "验证成功 // 价值已入账";
+            
+            triggerHaptic([30, 50, 40]); 
+            
+            const consoleDiv = btn.previousElementSibling;
+            consoleDiv.classList.remove('error');
+            consoleDiv.style.color = 'var(--accent-green)';
+            consoleDiv.style.textShadow = '0 0 8px rgba(5,150,105,0.4)';
+            consoleDiv.innerHTML = "<div class='flex-start'>> NodeStatus: Verified // Value +2.50</div>";
+
+            balance += 2.50;
+            document.getElementById('wallet-balance').innerText = balance.toFixed(2);
+            showFloatingCoin(btn);
+        }, 1000); 
+    }
+
+    function moveHold(btn, e) {
+        if (isSuccess || !holdTimer) return;
+        if (e && e.type === 'touchmove') {
+            let currentX = e.touches[0].clientX;
+            let currentY = e.touches[0].clientY;
+            if (Math.abs(currentX - startX) > 10 || Math.abs(currentY - startY) > 10) {
+                endHold(btn);
+            }
+        }
+    }
+
+    function endHold(btn) {
+        if(isSuccess) return;
+        btn.classList.remove('holding');
+        clearTimeout(holdTimer);
+        holdTimer = null;
+    }
+
+    // --- 【滑动确认组件】消除魔法数字 ---
+    const thumb = document.getElementById('swipeThumb');
+    const track = document.getElementById('swipeConfirm');
+    const fill = document.getElementById('swipeFill');
+    
+    let isDragging = false;
+    let dragStartX = 0;
+    let maxDrag = 0;
+    let isSwipeVerified = false;
+
+    function initSlider() {
+        if(track && thumb) { maxDrag = track.offsetWidth - thumb.offsetWidth - 8; }
+    }
+    window.addEventListener('resize', initSlider);
+
+    if(thumb) {
+        thumb.addEventListener('touchstart', (e) => {
+            if(isSwipeVerified) return;
+            initSlider();
+            isDragging = true;
+            dragStartX = e.touches[0].clientX - (parseFloat(thumb.style.transform.replace('translateX(', '')) || 0);
+            thumb.style.transition = 'none'; 
+            fill.style.transition = 'none';
+            triggerHaptic(10);
+        }, {passive: false});
+
+        document.addEventListener('touchmove', (e) => {
+            if (!isDragging || isSwipeVerified) return;
+            let currentX = e.touches[0].clientX - dragStartX;
+            
+            if (currentX < 0) currentX = 0;
+            if (currentX > maxDrag) currentX = maxDrag;
+
+            thumb.style.transform = `translateX(${currentX}px)`;
+            
+            // 修复魔法数字：使用百分比计算背景填充宽度
+            const percent = (currentX / maxDrag) * 100;
+            fill.style.width = `calc(${percent}% + 44px)`; 
+        }, {passive: false});
+
+        document.addEventListener('touchend', (e) => {
+            if (!isDragging || isSwipeVerified) return;
+            isDragging = false;
+            thumb.style.transition = 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)';
+            fill.style.transition = 'width 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)';
+
+            let currentX = parseFloat(thumb.style.transform.replace('translateX(', '')) || 0;
+
+            if (currentX > maxDrag * 0.85) {
+                isSwipeVerified = true;
+                thumb.style.transform = `translateX(${maxDrag}px)`;
+                fill.style.width = '100%';
+                track.classList.add('success');
+                
+                triggerHaptic([30, 50, 40]); 
+                
+                const consoleDiv = track.previousElementSibling;
+                consoleDiv.classList.remove('error');
+                consoleDiv.style.color = 'var(--accent-green)';
+                consoleDiv.style.textShadow = '0 0 8px rgba(5,150,105,0.4)';
+                consoleDiv.innerHTML = "<div class='flex-start'>> NodeStatus: Verified // Value +2.50</div>";
+
+                balance += 2.50;
+                document.getElementById('wallet-balance').innerText = balance.toFixed(2);
+                showFloatingCoin(track); 
+
+            } else {
+                thumb.style.transform = `translateX(0px)`;
+                fill.style.width = `0px`;
+                triggerHaptic(10);
+            }
+        });
+    }
+
+    // 弹窗与控制逻辑优化
+    function triggerStartupProcess() {
+        triggerHaptic(50); 
+        const overlay = document.getElementById('global-overlay');
+        const popup = document.getElementById('status-popup');
+        const text = document.getElementById('popup-text');
+        
+        document.body.classList.add('popup-active');
+        overlay.classList.add('active');
+        popup.classList.remove('failed'); 
+        text.innerHTML = "正在握手全球共识网络...<br>进行区块协议验证";
+        
+        setTimeout(() => {
+            triggerHaptic([30, 80]); 
+            popup.classList.add('failed'); 
+            text.innerHTML = "网络拥堵，节点握手超时。<br><span style='font-size:13px;color:var(--text-light);font-weight:500;'>您当前的物理坐标已记录。<br>请进入候补网络等待下一次激活。</span>";
+        }, 3000);
+    }
+
+    function closePopup(e) {
+        if (!e || e.target === document.getElementById('global-overlay') || e.target.classList.contains('popup-close-btn')) {
+            triggerHaptic(10); 
+            document.getElementById('global-overlay').classList.remove('active');
+            document.body.classList.remove('popup-active');
+        }
+    }
+
+    function toggleAcc(el) {
+        triggerHaptic(10);
+        const body = el.querySelector('.acc-body');
+        const icon = el.querySelector('.acc-header > span:last-child');
+        if (body.style.display === 'block') {
+            body.style.display = 'none'; icon.innerText = '+';
+        } else {
+            body.style.display = 'block'; icon.innerText = '−';
+        }
+    }
+
+    // 视差流体球
+    const orb = document.getElementById('orb');
+    let ticking = false;
+    document.addEventListener('touchmove', (e) => {
+        const touch = e.touches[0];
+        let targetX = (touch.clientX / window.innerWidth - 0.5) * 40; 
+        let targetY = (touch.clientY / window.innerHeight - 0.5) * 40;
+        if (!ticking) {
+            window.requestAnimationFrame(() => {
+                orb.style.transform = `translate3d(calc(-50% + ${targetX}vw), calc(-50% + ${targetY}vh), 0)`;
+                ticking = false;
+            });
+            ticking = true;
+        }
+    }, { passive: true });
+
+    // 中文解码特效 (优化为 requestAnimationFrame 防掉帧)
+    const zhChars = "数据真实锚点幻觉纠正网络共识算法训练重塑逻辑规则协议隐私价值";
+    const decodeObserver = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                const el = entry.target;
+                const finalString = el.getAttribute('data-text');
+                let iterations = 0;
+                
+                const decodeStep = () => {
+                    el.innerText = finalString.split("").map((letter, index) => {
+                        if(index < iterations) return finalString[index];
+                        return zhChars[Math.floor(Math.random() * zhChars.length)];
+                    }).join("");
+                    
+                    if(iterations < finalString.length) {
+                        iterations += 1/3; 
+                        requestAnimationFrame(decodeStep);
+                    } else {
+                        el.innerText = finalString; 
+                    }
+                };
+                
+                requestAnimationFrame(decodeStep);
+                decodeObserver.unobserve(el);
+            }
+        });
+    }, { threshold: 0.5 });
+    document.querySelectorAll('.decode-text').forEach(el => decodeObserver.observe(el));
+</script>
+</body>
+</html>
